@@ -1,21 +1,16 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { GestureResponderEvent, StyleSheet, View } from 'react-native';
-import Animated, {
-  Easing,
-  cancelAnimation,
-  useAnimatedStyle,
-  useSharedValue,
-  withDelay,
-  withRepeat,
-  withSequence,
-  withSpring,
-  withTiming,
-} from 'react-native-reanimated';
 import {
-  BEAT_DURATION_MS,
-  FruitConfig,
-} from '../types/sensory';
+  Animated,
+  Easing,
+  GestureResponderEvent,
+  Platform,
+  StyleSheet,
+  View,
+} from 'react-native';
+import { BEAT_DURATION_MS, FruitConfig } from '../types/sensory';
 import { FruitSvgArt } from './FruitSvgArt';
+
+const USE_NATIVE_DRIVER = Platform.OS !== 'web';
 
 interface FruitProps {
   config: FruitConfig;
@@ -32,130 +27,134 @@ export const Fruit: React.FC<FruitProps> = React.memo(
     const winkTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const tapCountRef = useRef(0);
 
-    // Continuous 120 BPM Cumbia ambient dance shared values
-    const danceBobY = useSharedValue(0);
-    const danceSwayX = useSharedValue(0);
-    const danceRockDeg = useSharedValue(0);
-    const dancePulseScale = useSharedValue(1);
-    const spotlightGlowScale = useSharedValue(1);
+    // Continuous 120 BPM Cumbia ambient dance values (60fps native driver)
+    const danceBobY = useRef(new Animated.Value(0)).current;
+    const danceSwayX = useRef(new Animated.Value(0)).current;
+    const danceRock = useRef(new Animated.Value(0)).current;
+    const dancePulseScale = useRef(new Animated.Value(1)).current;
+    const spotlightGlowScale = useRef(new Animated.Value(1)).current;
 
-    // Interactive touch reaction shared values
-    const squashX = useSharedValue(1);
-    const squashY = useSharedValue(1);
-    const reactionJumpY = useSharedValue(0);
-    const reactionSpinDeg = useSharedValue(0);
+    // Interactive touch reaction values
+    const squashX = useRef(new Animated.Value(1)).current;
+    const squashY = useRef(new Animated.Value(1)).current;
+    const reactionJumpY = useRef(new Animated.Value(0)).current;
+    const reactionSpin = useRef(new Animated.Value(0)).current;
 
     useEffect(() => {
-      const staggerMs = Math.round((config.phaseOffset / (2 * Math.PI)) * BEAT_DURATION_MS);
+      const staggerMs = Math.round(
+        (config.phaseOffset / (2 * Math.PI)) * BEAT_DURATION_MS
+      );
       const swayAmplitude = isSpotlight ? 16 : 22;
       const bobAmplitude = isSpotlight ? 18 : 14;
 
-      // 1. 120 BPM vertical Cumbia bounce (500ms per beat = 250ms down, 250ms up)
-      danceBobY.value = withDelay(
-        staggerMs,
-        withRepeat(
-          withSequence(
-            withTiming(-bobAmplitude, {
-              duration: BEAT_DURATION_MS / 2,
-              easing: Easing.out(Easing.quad),
-            }),
-            withTiming(bobAmplitude * 0.45, {
-              duration: BEAT_DURATION_MS / 2,
-              easing: Easing.in(Easing.quad),
-            })
-          ),
-          -1,
-          false
-        )
+      const bobLoop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(danceBobY, {
+            toValue: -bobAmplitude,
+            duration: BEAT_DURATION_MS / 2,
+            easing: Easing.out(Easing.quad),
+            useNativeDriver: USE_NATIVE_DRIVER,
+          }),
+          Animated.timing(danceBobY, {
+            toValue: bobAmplitude * 0.45,
+            duration: BEAT_DURATION_MS / 2,
+            easing: Easing.in(Easing.quad),
+            useNativeDriver: USE_NATIVE_DRIVER,
+          }),
+        ])
       );
 
-      // 2. Subtle rhythmic groove pulse at 120 BPM
-      dancePulseScale.value = withDelay(
-        staggerMs,
-        withRepeat(
-          withSequence(
-            withTiming(1.05, {
-              duration: BEAT_DURATION_MS / 2,
-              easing: Easing.out(Easing.sin),
-            }),
-            withTiming(0.96, {
-              duration: BEAT_DURATION_MS / 2,
-              easing: Easing.in(Easing.sin),
-            })
-          ),
-          -1,
-          false
-        )
+      const pulseLoop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(dancePulseScale, {
+            toValue: 1.05,
+            duration: BEAT_DURATION_MS / 2,
+            easing: Easing.out(Easing.sin),
+            useNativeDriver: USE_NATIVE_DRIVER,
+          }),
+          Animated.timing(dancePulseScale, {
+            toValue: 0.96,
+            duration: BEAT_DURATION_MS / 2,
+            easing: Easing.in(Easing.sin),
+            useNativeDriver: USE_NATIVE_DRIVER,
+          }),
+        ])
       );
 
-      // 3. Side-to-side Cumbia hip sway (full bar = 2 beats each way)
-      danceSwayX.value = withDelay(
-        staggerMs,
-        withRepeat(
-          withSequence(
-            withTiming(swayAmplitude, {
-              duration: BEAT_DURATION_MS * 2,
-              easing: Easing.inOut(Easing.sin),
-            }),
-            withTiming(-swayAmplitude, {
-              duration: BEAT_DURATION_MS * 2,
-              easing: Easing.inOut(Easing.sin),
-            })
-          ),
-          -1,
-          true
-        )
+      const swayLoop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(danceSwayX, {
+            toValue: swayAmplitude,
+            duration: BEAT_DURATION_MS * 2,
+            easing: Easing.inOut(Easing.sin),
+            useNativeDriver: USE_NATIVE_DRIVER,
+          }),
+          Animated.timing(danceSwayX, {
+            toValue: -swayAmplitude,
+            duration: BEAT_DURATION_MS * 2,
+            easing: Easing.inOut(Easing.sin),
+            useNativeDriver: USE_NATIVE_DRIVER,
+          }),
+        ])
       );
 
-      // 4. Rhythmic rocking tilt (-11deg to +11deg)
-      danceRockDeg.value = withDelay(
-        staggerMs,
-        withRepeat(
-          withSequence(
-            withTiming(11, {
-              duration: BEAT_DURATION_MS,
-              easing: Easing.inOut(Easing.sin),
-            }),
-            withTiming(-11, {
-              duration: BEAT_DURATION_MS,
-              easing: Easing.inOut(Easing.sin),
-            })
-          ),
-          -1,
-          true
-        )
+      const rockLoop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(danceRock, {
+            toValue: 1,
+            duration: BEAT_DURATION_MS,
+            easing: Easing.inOut(Easing.sin),
+            useNativeDriver: USE_NATIVE_DRIVER,
+          }),
+          Animated.timing(danceRock, {
+            toValue: -1,
+            duration: BEAT_DURATION_MS,
+            easing: Easing.inOut(Easing.sin),
+            useNativeDriver: USE_NATIVE_DRIVER,
+          }),
+        ])
       );
 
-      // 5. Spotlight aura pulse when in Solo Spotlight Mode
-      if (isSpotlight) {
-        spotlightGlowScale.value = withRepeat(
-          withSequence(
-            withTiming(1.16, {
-              duration: BEAT_DURATION_MS,
-              easing: Easing.inOut(Easing.sin),
-            }),
-            withTiming(0.94, {
-              duration: BEAT_DURATION_MS,
-              easing: Easing.inOut(Easing.sin),
-            })
-          ),
-          -1,
-          true
-        );
-      }
+      const glowLoop = isSpotlight
+        ? Animated.loop(
+            Animated.sequence([
+              Animated.timing(spotlightGlowScale, {
+                toValue: 1.16,
+                duration: BEAT_DURATION_MS,
+                easing: Easing.inOut(Easing.sin),
+                useNativeDriver: USE_NATIVE_DRIVER,
+              }),
+              Animated.timing(spotlightGlowScale, {
+                toValue: 0.94,
+                duration: BEAT_DURATION_MS,
+                easing: Easing.inOut(Easing.sin),
+                useNativeDriver: USE_NATIVE_DRIVER,
+              }),
+            ])
+          )
+        : null;
+
+      const startTimer = setTimeout(() => {
+        bobLoop.start();
+        pulseLoop.start();
+        swayLoop.start();
+        rockLoop.start();
+        glowLoop?.start();
+      }, staggerMs);
 
       return () => {
-        cancelAnimation(danceBobY);
-        cancelAnimation(dancePulseScale);
-        cancelAnimation(danceSwayX);
-        cancelAnimation(danceRockDeg);
-        cancelAnimation(spotlightGlowScale);
+        clearTimeout(startTimer);
+        bobLoop.stop();
+        pulseLoop.stop();
+        swayLoop.stop();
+        rockLoop.stop();
+        glowLoop?.stop();
       };
     }, [
       config.phaseOffset,
       danceBobY,
       dancePulseScale,
-      danceRockDeg,
+      danceRock,
       danceSwayX,
       isSpotlight,
       spotlightGlowScale,
@@ -178,8 +177,18 @@ export const Fruit: React.FC<FruitProps> = React.memo(
         const burstY = pageY || y;
 
         // Instant Squash on Press
-        squashX.value = withTiming(1.24, { duration: 75 });
-        squashY.value = withTiming(0.78, { duration: 75 });
+        Animated.parallel([
+          Animated.timing(squashX, {
+            toValue: 1.24,
+            duration: 75,
+            useNativeDriver: USE_NATIVE_DRIVER,
+          }),
+          Animated.timing(squashY, {
+            toValue: 0.78,
+            duration: 75,
+            useNativeDriver: USE_NATIVE_DRIVER,
+          }),
+        ]).start();
 
         // Trigger Wink Expression
         setIsWinking(true);
@@ -196,63 +205,81 @@ export const Fruit: React.FC<FruitProps> = React.memo(
           config.reactionStyle === 'spin360' || tapCountRef.current % 2 === 0;
 
         // High Jump reaction
-        reactionJumpY.value = withSequence(
-          withTiming(-54, {
+        Animated.sequence([
+          Animated.timing(reactionJumpY, {
+            toValue: -54,
             duration: 210,
             easing: Easing.out(Easing.cubic),
+            useNativeDriver: USE_NATIVE_DRIVER,
           }),
-          withSpring(0, {
-            damping: 8,
-            stiffness: 180,
-          })
-        );
+          Animated.spring(reactionJumpY, {
+            toValue: 0,
+            friction: 5,
+            tension: 140,
+            useNativeDriver: USE_NATIVE_DRIVER,
+          }),
+        ]).start();
 
         if (shouldSpin) {
-          reactionSpinDeg.value = 0;
-          reactionSpinDeg.value = withTiming(360, {
+          reactionSpin.setValue(0);
+          Animated.timing(reactionSpin, {
+            toValue: 1,
             duration: 480,
             easing: Easing.out(Easing.back(1.2)),
-          });
+            useNativeDriver: USE_NATIVE_DRIVER,
+          }).start();
         }
 
         // Notify parent for Haptics, Sound FX, and Confetti/Juice Droplet burst
         onFruitTap(config, burstX, burstY);
       },
-      [config, onFruitTap, reactionJumpY, reactionSpinDeg, squashX, squashY, x, y]
+      [config, onFruitTap, reactionJumpY, reactionSpin, squashX, squashY, x, y]
     );
 
     const handleTouchEnd = useCallback(() => {
       // Pop outward on release with elastic squash-and-stretch spring
-      squashX.value = withSequence(
-        withTiming(0.86, { duration: 90 }),
-        withSpring(1, { damping: 7, stiffness: 210 })
-      );
-      squashY.value = withSequence(
-        withTiming(1.22, { duration: 90 }),
-        withSpring(1, { damping: 7, stiffness: 210 })
-      );
+      Animated.parallel([
+        Animated.sequence([
+          Animated.timing(squashX, {
+            toValue: 0.86,
+            duration: 90,
+            useNativeDriver: USE_NATIVE_DRIVER,
+          }),
+          Animated.spring(squashX, {
+            toValue: 1,
+            friction: 4,
+            tension: 160,
+            useNativeDriver: USE_NATIVE_DRIVER,
+          }),
+        ]),
+        Animated.sequence([
+          Animated.timing(squashY, {
+            toValue: 1.22,
+            duration: 90,
+            useNativeDriver: USE_NATIVE_DRIVER,
+          }),
+          Animated.spring(squashY, {
+            toValue: 1,
+            friction: 4,
+            tension: 160,
+            useNativeDriver: USE_NATIVE_DRIVER,
+          }),
+        ]),
+      ]).start();
     }, [squashX, squashY]);
 
-    const animatedFruitStyle = useAnimatedStyle(() => {
-      return {
-        transform: [
-          { translateX: danceSwayX.value },
-          { translateY: danceBobY.value + reactionJumpY.value },
-          { rotate: `${danceRockDeg.value + reactionSpinDeg.value}deg` },
-          { scaleX: dancePulseScale.value * squashX.value },
-          { scaleY: dancePulseScale.value * squashY.value },
-        ],
-      };
+    const combinedTranslateY = Animated.add(danceBobY, reactionJumpY);
+    const combinedScaleX = Animated.multiply(dancePulseScale, squashX);
+    const combinedScaleY = Animated.multiply(dancePulseScale, squashY);
+
+    const rockDeg = danceRock.interpolate({
+      inputRange: [-1, 1],
+      outputRange: ['-11deg', '11deg'],
     });
 
-    const animatedSpotlightStyle = useAnimatedStyle(() => {
-      return {
-        transform: [
-          { translateX: danceSwayX.value * 0.4 },
-          { translateY: danceBobY.value * 0.4 },
-          { scale: spotlightGlowScale.value },
-        ],
-      };
+    const spinDeg = reactionSpin.interpolate({
+      inputRange: [0, 1],
+      outputRange: ['0deg', '360deg'],
     });
 
     const spotlightDiameter = size * 1.65;
@@ -285,8 +312,8 @@ export const Fruit: React.FC<FruitProps> = React.memo(
                 borderRadius: spotlightDiameter / 2,
                 backgroundColor: config.spotlightColor,
                 shadowColor: config.glowColor,
+                transform: [{ scale: spotlightGlowScale }],
               },
-              animatedSpotlightStyle,
             ]}
           />
         )}
@@ -297,8 +324,15 @@ export const Fruit: React.FC<FruitProps> = React.memo(
             styles.fruitShadowWrapper,
             {
               shadowColor: config.glowColor,
+              transform: [
+                { translateX: danceSwayX },
+                { translateY: combinedTranslateY },
+                { rotate: rockDeg },
+                { rotateZ: spinDeg },
+                { scaleX: combinedScaleX },
+                { scaleY: combinedScaleY },
+              ],
             },
-            animatedFruitStyle,
           ]}
         >
           <FruitSvgArt type={config.id} size={size} isWinking={isWinking} />

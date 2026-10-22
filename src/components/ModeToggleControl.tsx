@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  Animated,
+  Easing,
   Modal,
   Pressable,
   StyleSheet,
@@ -7,13 +9,6 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import Animated, {
-  Easing,
-  cancelAnimation,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-} from 'react-native-reanimated';
 import {
   DisplayMode,
   FRUIT_CONFIGS,
@@ -50,7 +45,7 @@ export const ModeToggleControl: React.FC<ModeToggleControlProps> = React.memo(
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [isHolding, setIsHolding] = useState(false);
     const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const holdProgress = useSharedValue(0);
+    const holdProgress = useRef(new Animated.Value(0)).current;
 
     const clearHold = useCallback(() => {
       if (holdTimerRef.current) {
@@ -58,8 +53,12 @@ export const ModeToggleControl: React.FC<ModeToggleControlProps> = React.memo(
         holdTimerRef.current = null;
       }
       setIsHolding(false);
-      cancelAnimation(holdProgress);
-      holdProgress.value = withTiming(0, { duration: 150 });
+      holdProgress.stopAnimation();
+      Animated.timing(holdProgress, {
+        toValue: 0,
+        duration: 150,
+        useNativeDriver: false,
+      }).start();
     }, [holdProgress]);
 
     useEffect(() => {
@@ -72,24 +71,25 @@ export const ModeToggleControl: React.FC<ModeToggleControlProps> = React.memo(
 
     const handlePressIn = useCallback(() => {
       setIsHolding(true);
-      holdProgress.value = 0;
-      holdProgress.value = withTiming(1, {
+      holdProgress.setValue(0);
+      Animated.timing(holdProgress, {
+        toValue: 1,
         duration: LONG_PRESS_DURATION_MS,
         easing: Easing.linear,
-      });
+        useNativeDriver: false,
+      }).start();
 
       holdTimerRef.current = setTimeout(() => {
         setIsHolding(false);
-        holdProgress.value = 0;
+        holdProgress.setValue(0);
         onUnlockHaptic();
         setIsMenuOpen(true);
       }, LONG_PRESS_DURATION_MS);
     }, [holdProgress, onUnlockHaptic]);
 
-    const progressFillStyle = useAnimatedStyle(() => {
-      return {
-        width: `${Math.round(holdProgress.value * 100)}%`,
-      };
+    const progressWidth = holdProgress.interpolate({
+      inputRange: [0, 1],
+      outputRange: ['0%', '100%'],
     });
 
     return (
@@ -130,7 +130,7 @@ export const ModeToggleControl: React.FC<ModeToggleControlProps> = React.memo(
               </Text>
               <View style={styles.holdTrack}>
                 <Animated.View
-                  style={[styles.holdProgressFill, progressFillStyle]}
+                  style={[styles.holdProgressFill, { width: progressWidth }]}
                 />
               </View>
             </Pressable>

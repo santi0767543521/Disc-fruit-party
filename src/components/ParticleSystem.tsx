@@ -1,16 +1,10 @@
-import React, { useEffect } from 'react';
-import { StyleSheet, View } from 'react-native';
-import Animated, {
-  Easing,
-  useAnimatedStyle,
-  useSharedValue,
-  withSequence,
-  withSpring,
-  withTiming,
-} from 'react-native-reanimated';
+import React, { useEffect, useRef } from 'react';
+import { Animated, Easing, Platform, StyleSheet, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { BurstParticle, FloatingSpawn } from '../types/sensory';
 import { FruitSvgArt } from './FruitSvgArt';
+
+const USE_NATIVE_DRIVER = Platform.OS !== 'web';
 
 interface ParticleSystemProps {
   burstParticles: BurstParticle[];
@@ -18,32 +12,44 @@ interface ParticleSystemProps {
 }
 
 /**
- * Individual Confetti / Juice Droplet particle animated on the UI thread at 60fps.
+ * Individual Confetti / Juice Droplet particle animated at 60fps.
  */
 const BurstParticleItem: React.FC<{ particle: BurstParticle }> = React.memo(
   ({ particle }) => {
-    const progress = useSharedValue(0);
+    const progress = useRef(new Animated.Value(0)).current;
 
     useEffect(() => {
-      progress.value = withTiming(1, {
+      Animated.timing(progress, {
+        toValue: 1,
         duration: 850,
         easing: Easing.out(Easing.cubic),
-      });
+        useNativeDriver: USE_NATIVE_DRIVER,
+      }).start();
     }, [progress]);
 
-    const animatedStyle = useAnimatedStyle(() => {
-      const t = progress.value;
-      // Ballistic arc: outward velocity + downward gravity pull
-      const translateX = particle.vx * t;
-      const translateY = particle.vy * t + 150 * t * t;
-      const scale = t < 0.15 ? t / 0.15 : 1 - (t - 0.15) * 0.95;
-      const opacity = t < 0.7 ? 1 : 1 - (t - 0.7) / 0.3;
-      const rotate = `${particle.rotation + t * 260}deg`;
+    const translateX = progress.interpolate({
+      inputRange: [0, 1],
+      outputRange: [0, particle.vx],
+    });
 
-      return {
-        opacity: Math.max(0, opacity),
-        transform: [{ translateX }, { translateY }, { scale }, { rotate }],
-      };
+    const translateY = progress.interpolate({
+      inputRange: [0, 0.4, 1],
+      outputRange: [0, particle.vy * 0.45, particle.vy + 135],
+    });
+
+    const scale = progress.interpolate({
+      inputRange: [0, 0.15, 1],
+      outputRange: [0.1, 1.1, 0.15],
+    });
+
+    const opacity = progress.interpolate({
+      inputRange: [0, 0.7, 1],
+      outputRange: [1, 1, 0],
+    });
+
+    const rotate = progress.interpolate({
+      inputRange: [0, 1],
+      outputRange: [`${particle.rotation}deg`, `${particle.rotation + 260}deg`],
     });
 
     const isDroplet = particle.shape === 'droplet';
@@ -66,8 +72,9 @@ const BurstParticleItem: React.FC<{ particle: BurstParticle }> = React.memo(
                 ? 4
                 : particle.size / 2,
             shadowColor: particle.color,
+            opacity,
+            transform: [{ translateX }, { translateY }, { scale }, { rotate }],
           },
-          animatedStyle,
         ]}
       >
         {isStar && (
@@ -89,36 +96,52 @@ const BurstParticleItem: React.FC<{ particle: BurstParticle }> = React.memo(
  */
 const FloatingSpawnItem: React.FC<{ spawn: FloatingSpawn }> = React.memo(
   ({ spawn }) => {
-    const progress = useSharedValue(0);
-    const popScale = useSharedValue(0.2);
+    const progress = useRef(new Animated.Value(0)).current;
+    const popScale = useRef(new Animated.Value(0.2)).current;
 
     useEffect(() => {
-      popScale.value = withSequence(
-        withSpring(spawn.scale * 1.18, { damping: 8, stiffness: 220 }),
-        withSpring(spawn.scale, { damping: 12, stiffness: 150 })
-      );
-      progress.value = withTiming(1, {
-        duration: 1850,
-        easing: Easing.out(Easing.quad),
-      });
+      Animated.parallel([
+        Animated.sequence([
+          Animated.spring(popScale, {
+            toValue: spawn.scale * 1.18,
+            friction: 5,
+            tension: 180,
+            useNativeDriver: USE_NATIVE_DRIVER,
+          }),
+          Animated.spring(popScale, {
+            toValue: spawn.scale * 0.85,
+            friction: 7,
+            tension: 110,
+            useNativeDriver: USE_NATIVE_DRIVER,
+          }),
+        ]),
+        Animated.timing(progress, {
+          toValue: 1,
+          duration: 1850,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: USE_NATIVE_DRIVER,
+        }),
+      ]).start();
     }, [popScale, progress, spawn.scale]);
 
-    const animatedStyle = useAnimatedStyle(() => {
-      const t = progress.value;
-      const translateY = -185 * t;
-      const translateX = Math.sin(t * Math.PI * 2.5) * spawn.driftX;
-      const rotate = `${Math.sin(t * Math.PI * 2) * 18}deg`;
-      const opacity = t < 0.65 ? 1 : 1 - (t - 0.65) / 0.35;
+    const translateY = progress.interpolate({
+      inputRange: [0, 1],
+      outputRange: [0, -185],
+    });
 
-      return {
-        opacity: Math.max(0, opacity),
-        transform: [
-          { translateX },
-          { translateY },
-          { scale: popScale.value * (1 - t * 0.25) },
-          { rotate },
-        ],
-      };
+    const translateX = progress.interpolate({
+      inputRange: [0, 0.33, 0.66, 1],
+      outputRange: [0, spawn.driftX, -spawn.driftX * 0.7, spawn.driftX * 0.4],
+    });
+
+    const rotate = progress.interpolate({
+      inputRange: [0, 0.5, 1],
+      outputRange: ['-10deg', '14deg', '-8deg'],
+    });
+
+    const opacity = progress.interpolate({
+      inputRange: [0, 0.65, 1],
+      outputRange: [1, 1, 0],
     });
 
     const size = spawn.kind === 'miniFruit' ? 76 : 64;
@@ -133,8 +156,14 @@ const FloatingSpawnItem: React.FC<{ spawn: FloatingSpawn }> = React.memo(
             top: spawn.y - size / 2,
             width: size,
             height: size,
+            opacity,
+            transform: [
+              { translateX },
+              { translateY },
+              { scale: popScale },
+              { rotate },
+            ],
           },
-          animatedStyle,
         ]}
       >
         {spawn.kind === 'miniFruit' ? (
